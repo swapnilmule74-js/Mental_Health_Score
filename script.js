@@ -1,219 +1,810 @@
-const API_BASE_URL = 'https://mental-health-score-k0lh.onrender.com';
+// =====================================================
+// FASTAPI SERVER
+// =====================================================
 
-const form = document.getElementById('predict-form');
-const submitBtn = document.getElementById('submit-btn');
-const formError = document.getElementById('form-error');
-const resultSection = document.getElementById('result');
-const resetBtn = document.getElementById('reset-btn');
+const API_URL = "https://mental-health-score-k0lh.onrender.com";
 
-const scoreNumberEl = document.getElementById('score-number');
-const scoreLabelEl = document.getElementById('score-label');
-const scoreNoteEl = document.getElementById('score-note');
-const gaugeFill = document.getElementById('gauge-fill');
-const gaugeNeedle = document.getElementById('gauge-needle');
 
-const GAUGE_ARC_LENGTH = 251.2; // matches stroke-dasharray in CSS
-const GAUGE_MIN_SCORE = 0;
-const GAUGE_MAX_SCORE = 10;
+// =====================================================
+// ELEMENTS
+// =====================================================
 
-// Field id -> payload key, plus the input element type for parsing.
-const FIELD_MAP = [
-  { id: 'age', key: 'Age', type: 'int' },
-  { id: 'gender', key: 'Gender', type: 'str' },
-  { id: 'country', key: 'Country', type: 'str' },
-  { id: 'academic-level', key: 'Academic_Level', type: 'str' },
-  { id: 'platform', key: 'Most_Used_Platform', type: 'str' },
-  { id: 'purpose', key: 'Purpose_Of_Use', type: 'str' },
-  { id: 'usage-hours', key: 'Avg_Daily_Usage_Hours', type: 'float' },
-  { id: 'unlocks', key: 'Daily_Unlocks', type: 'int' },
-  { id: 'study-hours', key: 'Study_Hours', type: 'float' },
-  { id: 'activity-hours', key: 'Physical_Activity_Hours', type: 'float' },
-  { id: 'sleep-hours', key: 'Sleep_Hours_Per_Night', type: 'float' },
-  { id: 'stress', key: 'Stress_Level', type: 'str' },
-];
+const form =
+    document.getElementById("predictionForm");
 
-function clearFieldErrors() {
-  document.querySelectorAll('.field').forEach((f) => f.classList.remove('invalid'));
-  document.querySelectorAll('.field-error').forEach((e) => { e.textContent = ''; });
-  formError.textContent = '';
-}
+const predictBtn =
+    document.getElementById("predictBtn");
 
-function markFieldInvalid(id, message) {
-  const input = document.getElementById(id);
-  const field = input ? input.closest('.field') : null;
-  const errorEl = document.querySelector(`[data-error-for="${id}"]`);
-  if (field) field.classList.add('invalid');
-  if (errorEl) errorEl.textContent = message;
-}
+const resetBtn =
+    document.getElementById("resetBtn");
 
-function collectAndValidate() {
-  clearFieldErrors();
-  const payload = {};
-  let firstInvalidId = null;
+const buttonText =
+    document.getElementById("buttonText");
 
-  FIELD_MAP.forEach(({ id, key, type }) => {
-    const input = document.getElementById(id);
-    const rawValue = input.value.trim();
+const loader =
+    document.getElementById("loader");
 
-    if (rawValue === '') {
-      markFieldInvalid(id, 'This field is required.');
-      if (!firstInvalidId) firstInvalidId = id;
-      return;
-    }
+const errorBox =
+    document.getElementById("errorBox");
 
-    if (type === 'int' || type === 'float') {
-      const num = Number(rawValue);
-      if (Number.isNaN(num)) {
-        markFieldInvalid(id, 'Enter a number.');
-        if (!firstInvalidId) firstInvalidId = id;
-        return;
-      }
-      if (input.min !== '' && num < Number(input.min)) {
-        markFieldInvalid(id, `Must be at least ${input.min}.`);
-        if (!firstInvalidId) firstInvalidId = id;
-        return;
-      }
-      if (input.max !== '' && num > Number(input.max)) {
-        markFieldInvalid(id, `Must be at most ${input.max}.`);
-        if (!firstInvalidId) firstInvalidId = id;
-        return;
-      }
-      payload[key] = type === 'int' ? Math.trunc(num) : num;
-    } else {
-      payload[key] = rawValue;
-    }
-  });
+const emptyResult =
+    document.getElementById("emptyResult");
 
-  return { payload, firstInvalidId };
-}
+const predictionResult =
+    document.getElementById("predictionResult");
 
-function setLoading(isLoading) {
-  submitBtn.disabled = isLoading;
-  if (isLoading) {
-    submitBtn.innerHTML = '<span class="spinner" style="display:inline-block"></span><span class="btn-label">Reading&hellip;</span>';
-  } else {
-    submitBtn.innerHTML = '<span class="btn-label">Take the reading</span>';
-  }
-}
+const resultError =
+    document.getElementById("resultError");
 
-function bandForScore(score) {
-  if (score <= 3) {
-    return {
-      label: 'Struggling',
-      note: 'The signals here point to real strain. A conversation with a counsellor, doctor, or someone you trust could help more than another hour of scrolling.',
-      color: getComputedStyle(document.documentElement).getPropertyValue('--rust').trim(),
-    };
-  }
-  if (score <= 5.5) {
-    return {
-      label: 'Under strain',
-      note: 'Things are wobblier than they could be. Small shifts — more sleep, a little less screen — tend to move this number.',
-      color: getComputedStyle(document.documentElement).getPropertyValue('--amber').trim(),
-    };
-  }
-  if (score <= 7.5) {
-    return {
-      label: 'Steady',
-      note: 'A reasonably balanced state. Keep an eye on the habits that got you here.',
-      color: getComputedStyle(document.documentElement).getPropertyValue('--teal').trim(),
-    };
-  }
-  return {
-    label: 'Thriving',
-    note: 'Your day-to-day rhythm looks like it\u2019s working for you. Good foundations worth protecting.',
-    color: getComputedStyle(document.documentElement).getPropertyValue('--teal-deep').trim(),
-  };
-}
+const resultErrorText =
+    document.getElementById("resultErrorText");
 
-function renderResult(score) {
-  const clamped = Math.min(Math.max(score, GAUGE_MIN_SCORE), GAUGE_MAX_SCORE);
-  const fraction = (clamped - GAUGE_MIN_SCORE) / (GAUGE_MAX_SCORE - GAUGE_MIN_SCORE);
-  const band = bandForScore(score);
+const scoreValue =
+    document.getElementById("scoreValue");
 
-  scoreNumberEl.textContent = score.toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1');
-  scoreLabelEl.textContent = band.label;
-  scoreLabelEl.style.color = band.color;
-  scoreNoteEl.textContent = band.note;
+const scoreTitle =
+    document.getElementById("scoreTitle");
 
-  resultSection.hidden = false;
+const scoreMessage =
+    document.getElementById("scoreMessage");
 
-  // Animate gauge fill and needle on next frame so the transition triggers.
-  gaugeFill.style.stroke = band.color;
-  gaugeFill.style.strokeDashoffset = String(GAUGE_ARC_LENGTH);
-  gaugeNeedle.style.transform = 'rotate(-90deg)';
+const gaugeFill =
+    document.getElementById("gaugeFill");
 
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      const offset = GAUGE_ARC_LENGTH * (1 - fraction);
-      gaugeFill.style.strokeDashoffset = String(offset);
-      const angle = -90 + fraction * 180;
-      gaugeNeedle.style.transform = `rotate(${angle}deg)`;
-    });
-  });
+const anotherBtn =
+    document.getElementById("anotherBtn");
 
-  resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
+const tryAgainBtn =
+    document.getElementById("tryAgainBtn");
 
-async function submitPrediction(payload) {
-  const response = await fetch(`${API_BASE_URL}/predict`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
 
-  if (!response.ok) {
-    let detail = `Request failed with status ${response.status}.`;
-    try {
-      const body = await response.json();
-      if (body && body.detail) {
-        if (Array.isArray(body.detail)) {
-          detail = body.detail
-            .map((d) => `${(d.loc || []).slice(-1)[0] || 'field'}: ${d.msg}`)
-            .join(' \u2014 ');
-        } else {
-          detail = String(body.detail);
+// =====================================================
+// STRESS LEVEL BUTTONS
+// =====================================================
+
+const stressButtons =
+    document.querySelectorAll(
+        ".stress-options button"
+    );
+
+
+stressButtons.forEach(button => {
+
+    button.addEventListener(
+        "click",
+        () => {
+
+            stressButtons.forEach(btn => {
+
+                btn.classList.remove(
+                    "active"
+                );
+
+            });
+
+
+            button.classList.add(
+                "active"
+            );
+
+
+            document.getElementById(
+                "Stress_Level"
+            ).value =
+                button.dataset.stress;
+
+
+            clearError();
+
         }
-      }
-    } catch (_) {
-      // response had no JSON body; keep the generic message
-    }
-    throw new Error(detail);
-  }
+    );
 
-  return response.json();
+});
+
+
+// =====================================================
+// ERROR
+// =====================================================
+
+function showError(message) {
+
+    errorBox.textContent =
+        message;
+
+    errorBox.classList.add(
+        "show"
+    );
+
 }
 
-form.addEventListener('submit', async (event) => {
-  event.preventDefault();
-  resultSection.hidden = true;
 
-  const { payload, firstInvalidId } = collectAndValidate();
-  if (firstInvalidId) {
-    document.getElementById(firstInvalidId).focus();
-    formError.textContent = 'Please fix the highlighted fields.';
-    return;
-  }
+function clearError() {
 
-  setLoading(true);
-  try {
-    const data = await submitPrediction(payload);
-    const score = data.predicated_mental_health_score;
-    renderResult(score);
-  } catch (err) {
-    if (err instanceof TypeError) {
-      formError.textContent = `Can\u2019t reach the API at ${API_BASE_URL}. Is the backend running?`;
-    } else {
-      formError.textContent = err.message || 'Something went wrong. Please try again.';
+    errorBox.textContent = "";
+
+    errorBox.classList.remove(
+        "show"
+    );
+
+}
+
+
+// =====================================================
+// GET NUMBER
+// =====================================================
+
+function number(id) {
+
+    return Number(
+        document.getElementById(id).value
+    );
+
+}
+
+
+// =====================================================
+// CREATE PAYLOAD
+// =====================================================
+
+function getFormData() {
+
+    return {
+
+        Age:
+            number("Age"),
+
+        Gender:
+            document.getElementById(
+                "Gender"
+            ).value,
+
+        Country:
+            document.getElementById(
+                "Country"
+            ).value.trim(),
+
+        Academic_Level:
+            document.getElementById(
+                "Academic_Level"
+            ).value,
+
+        Most_Used_Platform:
+            document.getElementById(
+                "Most_Used_Platform"
+            ).value,
+
+        Purpose_Of_Use:
+            document.getElementById(
+                "Purpose_Of_Use"
+            ).value,
+
+        Avg_Daily_Usage_Hours:
+            number(
+                "Avg_Daily_Usage_Hours"
+            ),
+
+        Daily_Unlocks:
+            number(
+                "Daily_Unlocks"
+            ),
+
+        Study_Hours:
+            number(
+                "Study_Hours"
+            ),
+
+        Physical_Activity_Hours:
+            number(
+                "Physical_Activity_Hours"
+            ),
+
+        Sleep_Hours_Per_Night:
+            number(
+                "Sleep_Hours_Per_Night"
+            ),
+
+        Stress_Level:
+            document.getElementById(
+                "Stress_Level"
+            ).value
+
+    };
+
+}
+
+
+// =====================================================
+// VALIDATION
+// =====================================================
+
+function validateData(data) {
+
+    if (!data.Gender)
+        return "Please select your gender.";
+
+    if (!data.Country)
+        return "Please enter your country.";
+
+    if (!data.Academic_Level)
+        return "Please select your academic level.";
+
+    if (!data.Most_Used_Platform)
+        return "Please select your most-used platform.";
+
+    if (!data.Purpose_Of_Use)
+        return "Please select your primary purpose.";
+
+    if (!data.Stress_Level)
+        return "Please select your stress level.";
+
+
+    if (
+        !Number.isInteger(data.Age) ||
+        data.Age < 10 ||
+        data.Age > 100
+    ) {
+
+        return "Age must be between 10 and 100.";
+
     }
-  } finally {
-    setLoading(false);
-  }
-});
 
-resetBtn.addEventListener('click', () => {
-  resultSection.hidden = true;
-  form.reset();
-  clearFieldErrors();
-  document.getElementById('age').focus();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-});
+
+    if (
+        data.Avg_Daily_Usage_Hours < 0 ||
+        data.Avg_Daily_Usage_Hours > 24
+    ) {
+
+        return "Daily usage must be between 0 and 24 hours.";
+
+    }
+
+
+    if (
+        !Number.isInteger(data.Daily_Unlocks) ||
+        data.Daily_Unlocks < 0
+    ) {
+
+        return "Daily unlocks must be 0 or more.";
+
+    }
+
+
+    if (
+        data.Study_Hours < 0 ||
+        data.Study_Hours > 24
+    ) {
+
+        return "Study hours must be between 0 and 24.";
+
+    }
+
+
+    if (
+        data.Physical_Activity_Hours < 0 ||
+        data.Physical_Activity_Hours > 24
+    ) {
+
+        return "Physical activity must be between 0 and 24 hours.";
+
+    }
+
+
+    if (
+        data.Sleep_Hours_Per_Night < 0 ||
+        data.Sleep_Hours_Per_Night > 24
+    ) {
+
+        return "Sleep must be between 0 and 24 hours.";
+
+    }
+
+
+    return null;
+
+}
+
+
+// =====================================================
+// LOADING
+// =====================================================
+
+function setLoading(loading) {
+
+    predictBtn.disabled =
+        loading;
+
+    if (loading) {
+
+        predictBtn.classList.add(
+            "loading"
+        );
+
+        buttonText.style.display =
+            "none";
+
+        loader.style.display =
+            "block";
+
+    }
+
+    else {
+
+        predictBtn.classList.remove(
+            "loading"
+        );
+
+        buttonText.style.display =
+            "inline";
+
+        loader.style.display =
+            "none";
+
+    }
+
+}
+
+
+// =====================================================
+// SHOW RESULT
+// =====================================================
+
+function showPrediction(score) {
+
+    const value =
+        Number(score);
+
+
+    if (!Number.isFinite(value)) {
+
+        throw new Error(
+            "Invalid prediction returned by API."
+        );
+
+    }
+
+
+    // Hide empty screen
+
+    emptyResult.style.display =
+        "none";
+
+    resultError.classList.remove(
+        "show"
+    );
+
+
+    // Show result
+
+    predictionResult.classList.add(
+        "show"
+    );
+
+
+    // Display score
+
+    scoreValue.textContent =
+        value.toFixed(2);
+
+
+    /*
+        Your backend returns the model score.
+
+        We do NOT change the score.
+
+        Gauge is only a visual representation.
+    */
+
+    const gaugePercent =
+        Math.max(
+            0,
+            Math.min(100, value * 10)
+        );
+
+
+    // Convert score to gauge rotation
+
+    const rotation =
+        -90 +
+        (gaugePercent * 1.8);
+
+
+    gaugeFill.style.borderTopColor =
+        "#67c9a8";
+
+    gaugeFill.style.transform =
+        `rotate(${rotation}deg)`;
+
+
+    // Message
+
+    if (value < 35) {
+
+        scoreTitle.textContent =
+            "Signal detected";
+
+        scoreMessage.textContent =
+            "Your model output is in the lower part of the displayed score range.";
+
+    }
+
+    else if (value < 70) {
+
+        scoreTitle.textContent =
+            "Balanced signal";
+
+        scoreMessage.textContent =
+            "Your model output is in the middle part of the displayed score range.";
+
+    }
+
+    else {
+
+        scoreTitle.textContent =
+            "Strong signal";
+
+        scoreMessage.textContent =
+            "Your model output is in the higher part of the displayed score range.";
+
+    }
+
+}
+
+
+// =====================================================
+// SHOW RESULT ERROR
+// =====================================================
+
+function showResultError(message) {
+
+    emptyResult.style.display =
+        "none";
+
+    predictionResult.classList.remove(
+        "show"
+    );
+
+    resultError.classList.add(
+        "show"
+    );
+
+    resultErrorText.textContent =
+        message;
+
+}
+
+
+// =====================================================
+// API REQUEST
+// =====================================================
+
+async function sendPrediction(data) {
+
+    const response =
+        await fetch(
+            `${API_URL}/predict`,
+            {
+
+                method: "POST",
+
+                headers: {
+
+                    "Content-Type":
+                        "application/json",
+
+                    "Accept":
+                        "application/json"
+
+                },
+
+                body:
+                    JSON.stringify(data)
+
+            }
+        );
+
+
+    let result;
+
+
+    try {
+
+        result =
+            await response.json();
+
+    }
+
+    catch {
+
+        throw new Error(
+            "Invalid response received from FastAPI."
+        );
+
+    }
+
+
+    // FastAPI validation error
+
+    if (!response.ok) {
+
+        if (
+            Array.isArray(
+                result.detail
+            )
+        ) {
+
+            const errors =
+                result.detail
+                    .map(error => {
+
+                        const field =
+                            error.loc?.at(-1)
+                            || "Field";
+
+                        return (
+                            field +
+                            ": " +
+                            error.msg
+                        );
+
+                    })
+                    .join(" | ");
+
+
+            throw new Error(
+                errors
+            );
+
+        }
+
+
+        throw new Error(
+            result.detail ||
+            `API error ${response.status}`
+        );
+
+    }
+
+
+    /*
+        IMPORTANT
+
+        Your backend response model is:
+
+        predicated_mental_health_score
+
+        So we use that exact property.
+    */
+
+    return result
+        .predicated_mental_health_score;
+
+}
+
+
+// =====================================================
+// SUBMIT
+// =====================================================
+
+form.addEventListener(
+    "submit",
+    async function(event) {
+
+        event.preventDefault();
+
+
+        clearError();
+
+
+        // Browser validation
+
+        if (
+            !form.checkValidity()
+        ) {
+
+            form.reportValidity();
+
+            showError(
+                "Please complete all required fields."
+            );
+
+            return;
+
+        }
+
+
+        const data =
+            getFormData();
+
+
+        const validationError =
+            validateData(data);
+
+
+        if (validationError) {
+
+            showError(
+                validationError
+            );
+
+            return;
+
+        }
+
+
+        setLoading(true);
+
+
+        try {
+
+            const score =
+                await sendPrediction(
+                    data
+                );
+
+
+            showPrediction(
+                score
+            );
+
+        }
+
+
+        catch (error) {
+
+            console.error(
+                error
+            );
+
+
+            const message =
+                error instanceof TypeError
+                    ? "Cannot connect to FastAPI. Make sure Uvicorn is running on port 2200."
+                    : error.message;
+
+
+            showResultError(
+                message
+            );
+
+        }
+
+
+        finally {
+
+            setLoading(false);
+
+        }
+
+    }
+);
+
+
+// =====================================================
+// RESET
+// =====================================================
+
+function resetUI() {
+
+    clearError();
+
+
+    predictionResult.classList.remove(
+        "show"
+    );
+
+
+    resultError.classList.remove(
+        "show"
+    );
+
+
+    emptyResult.style.display =
+        "flex";
+
+
+    scoreValue.textContent =
+        "0.00";
+
+
+    gaugeFill.style.transform =
+        "rotate(-90deg)";
+
+
+    stressButtons.forEach(
+        button => {
+
+            button.classList.remove(
+                "active"
+            );
+
+        }
+    );
+
+
+    document.getElementById(
+        "Stress_Level"
+    ).value = "";
+
+}
+
+
+resetBtn.addEventListener(
+    "click",
+    resetUI
+);
+
+
+// =====================================================
+// RUN ANOTHER READ
+// =====================================================
+
+anotherBtn.addEventListener(
+    "click",
+    () => {
+
+        predictionResult.classList.remove(
+            "show"
+        );
+
+        resultError.classList.remove(
+            "show"
+        );
+
+        emptyResult.style.display =
+            "flex";
+
+        scoreValue.textContent =
+            "0.00";
+
+        gaugeFill.style.transform =
+            "rotate(-90deg)";
+
+        window.scrollTo({
+            top: 0,
+            behavior: "smooth"
+        });
+
+    }
+);
+
+
+// =====================================================
+// TRY AGAIN
+// =====================================================
+
+tryAgainBtn.addEventListener(
+    "click",
+    () => {
+
+        resultError.classList.remove(
+            "show"
+        );
+
+        emptyResult.style.display =
+            "flex";
+
+    }
+);
+
+
+// =====================================================
+// CLEAR ERROR WHEN USER CHANGES INPUT
+// =====================================================
+
+document
+    .querySelectorAll(
+        "input, select"
+    )
+    .forEach(element => {
+
+        element.addEventListener(
+            "input",
+            clearError
+        );
+
+        element.addEventListener(
+            "change",
+            clearError
+        );
+
+    });
