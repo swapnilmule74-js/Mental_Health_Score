@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://127.0.0.1:2200';
+const API_BASE_URL = 'https://mental-health-score-k0lh.onrender.com';
 
 const form = document.getElementById('predict-form');
 const submitBtn = document.getElementById('submit-btn');

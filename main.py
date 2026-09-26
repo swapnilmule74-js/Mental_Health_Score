@@ -6,7 +6,11 @@ from typing import Literal
 from fastapi.middleware.cors import CORSMiddleware
 
 
+
+
 model = joblib.load('Mental_Health_Model.pkl')
+
+
 
 app = FastAPI()
 
